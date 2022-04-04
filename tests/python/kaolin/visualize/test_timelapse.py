@@ -21,8 +21,6 @@ import pytest
 
 
 from kaolin import io
-import kaolin.io.usd
-import kaolin.io.materials
 from kaolin.visualize import timelapse
 from kaolin.ops.conversions import trianglemeshes_to_voxelgrids
 
@@ -31,6 +29,14 @@ from kaolin.ops.conversions import trianglemeshes_to_voxelgrids
 def out_dir():
     # Create temporary output directory
     out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '_out')
+    os.makedirs(out_dir, exist_ok=True)
+    yield out_dir
+    shutil.rmtree(out_dir)
+
+@pytest.fixture(scope='class')
+def instancer_out_dir():
+    # Create temporary output directory
+    out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '_instancer_out')
     os.makedirs(out_dir, exist_ok=True)
     yield out_dir
     shutil.rmtree(out_dir)
@@ -48,16 +54,24 @@ def voxelgrid(meshes):
 def pointcloud():
     cur_dir = os.path.dirname(os.path.realpath(__file__))
     pointcloud = io.usd.import_pointcloud(os.path.join(cur_dir, os.pardir, os.pardir,
-                                          os.pardir, 'samples/rocket_pointcloud.usda'),
-                                          '/World/pointcloud')
+                                          os.pardir, 'samples/rocket_pointcloud_GeomPoints.usda'),
+                                          '/World/pointcloud').points
     return pointcloud
 
+@pytest.fixture(scope='module')
+def pointcloud_color():
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    pointcloud, color, normals = io.usd.import_pointcloud(os.path.join(cur_dir, os.pardir, os.pardir,
+                                                          os.pardir, 'samples/golden/pointcloud_GeomPoints_colors.usda'),
+                                                          '/World/pointcloud')
+    return pointcloud, color
 
 @pytest.fixture(scope='module')
 def meshes():
     cur_dir = os.path.dirname(os.path.realpath(__file__))
     meshes = io.usd.import_meshes(os.path.join(cur_dir, os.pardir, os.pardir,
-                                  os.pardir, 'samples/rocket_hetero.usd'), 
+                                  os.pardir, 'samples/rocket_hetero.usd'),
+                                  with_normals=True,
                                   heterogeneous_mesh_handler=io.usd.heterogeneous_mesh_handler_naive_homogenize)
     return meshes
 
@@ -116,7 +130,7 @@ class TestTimelapse:
         assert os.path.exists(texture_dir) 
         for iteration in data.keys():
             filename = os.path.join(out_dir, 'test', 'mesh_0.usd')
-            mesh_in = io.usd.import_mesh(filename, time=iteration)
+            mesh_in = io.usd.import_mesh(filename, time=iteration, with_normals=True)
             # Verify mesh properties
             assert torch.allclose(data[iteration]['vertices_list'][0], mesh_in.vertices)
             assert torch.equal(data[iteration]['faces_list'][0], mesh_in.faces)
@@ -125,7 +139,7 @@ class TestTimelapse:
             else:
                 i = iteration
             assert torch.allclose(data[i]['uvs_list'][0].view(-1, 2), mesh_in.uvs.view(-1, 2))
-            assert torch.equal(data[i]['face_uvs_idx_list'][0], mesh_in.face_uvs_idx)
+            # assert torch.equal(data[i]['face_uvs_idx_list'][0], mesh_in.face_uvs_idx)
             assert torch.allclose(data[i]['face_normals_list'][0], mesh_in.face_normals)
 
             materials = data[iteration]['materials_list'][0]
@@ -168,8 +182,8 @@ class TestTimelapse:
         writer = timelapse.Timelapse(out_dir)
 
         data = {
-            0: {'pointcloud_list': [pointcloud]},
-            10: {'pointcloud_list': [pointcloud + 100.]},
+            0: {'pointcloud_list': [pointcloud], 'colors': None, 'points_type': 'usd_geom_points'},
+            10: {'pointcloud_list': [pointcloud + 100.], 'colors': None, 'points_type': 'usd_geom_points'},
         }
         for iteration, params in data.items():
             writer.add_pointcloud_batch(iteration=iteration, category='test', **params)
@@ -177,7 +191,45 @@ class TestTimelapse:
         # Verify
         filename = os.path.join(out_dir, 'test', 'pointcloud_0.usd')
         for iteration, params in data.items():
-            pointcloud_in = io.usd.import_pointcloud(filename, scene_path='/pointcloud_0', time=iteration)
+            pointcloud_in = io.usd.import_pointcloud(filename, scene_path='/pointcloud_0', time=iteration)[0]
+
+            assert torch.allclose(pointcloud_in, params['pointcloud_list'][0])
+
+    def test_add_pointcloud_batch_color(self, out_dir, pointcloud_color):
+        writer = timelapse.Timelapse(out_dir)
+
+        pointcloud, color = pointcloud_color
+
+        data = {
+            0: {'pointcloud_list': [pointcloud], 'colors': [color], 'points_type': 'usd_geom_points'},
+            10: {'pointcloud_list': [pointcloud + 100.], 'colors': [color], 'points_type': 'usd_geom_points'},
+        }
+        for iteration, params in data.items():
+            writer.add_pointcloud_batch(iteration=iteration, category='test', **params)
+
+        # Verify
+        filename = os.path.join(out_dir, 'test', 'pointcloud_0.usd')
+        for iteration, params in data.items():
+            pointcloud_in, color_in, normals_in = io.usd.import_pointcloud(filename, scene_path='/pointcloud_0', time=iteration)
+
+            assert torch.allclose(pointcloud_in, params['pointcloud_list'][0])
+
+            assert torch.allclose(color_in, params['colors'][0])
+
+    def test_add_pointcloud_batch_instancer(self, instancer_out_dir, pointcloud):
+        writer = timelapse.Timelapse(instancer_out_dir)
+
+        data = {
+            0: {'pointcloud_list': [pointcloud], 'colors': None},
+            10: {'pointcloud_list': [pointcloud + 100.], 'colors': None},
+        }
+        for iteration, params in data.items():
+            writer.add_pointcloud_batch(iteration=iteration, category='test', **params)
+
+        # Verify
+        filename = os.path.join(instancer_out_dir, 'test', 'pointcloud_0.usd')
+        for iteration, params in data.items():
+            pointcloud_in = io.usd.import_pointcloud(filename, scene_path='/pointcloud_0', time=iteration)[0]
 
             assert torch.allclose(pointcloud_in, params['pointcloud_list'][0])
 
@@ -224,6 +276,9 @@ class TestTimelapseParser:
         assert parser.num_mesh_categories() == 2
         assert parser.num_pointcloud_categories() == 2
         assert parser.num_voxelgrid_categories() == 1
+        assert parser.num_mesh_items() == 4
+        assert parser.num_pointcloud_items() == 4
+        assert parser.num_voxelgrid_items() == 2
 
         expected_categories = {
             "mesh": [
@@ -263,4 +318,3 @@ class TestTimelapseParser:
         assert parser.check_for_updates()
         assert parser.num_mesh_categories() == 1
         assert parser.num_pointcloud_categories() == 1
-        assert parser.num_voxelgrid_categories() == 0

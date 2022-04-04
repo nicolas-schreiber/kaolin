@@ -1,4 +1,5 @@
-// Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.
+// Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,3 +12,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+#ifndef KAOLIN_OPS_SPC_QUERY_H_
+#define KAOLIN_OPS_SPC_QUERY_H_
+
+#ifdef WITH_CUDA
+#include "../../spc_math.h"
+#endif
+
+#include <ATen/ATen.h>
+
+namespace kaolin {
+
+at::Tensor query_cuda(
+    at::Tensor octree,
+    at::Tensor prefix_sum,
+    at::Tensor query_points,
+    uint32_t target_level);
+
+} // namespace kaolin
+
+#endif // KAOLIN_OPS_SPC_QUERY_H_
+

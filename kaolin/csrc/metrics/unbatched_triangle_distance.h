@@ -1,4 +1,5 @@
-// Copyright (c) 2019-2021, NVIDIA CORPORATION. All rights reserved.
+// Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,27 +21,21 @@
 namespace kaolin {
 
 void unbatched_triangle_distance_forward_cuda(
-    const at::Tensor points,
-    const at::Tensor verts_1,
-    const at::Tensor verts_2,
-    const at::Tensor verts_3,
-    const at::Tensor dist1,
-    const at::Tensor idx1,
-    const at::Tensor type1);
+    at::Tensor points,
+    at::Tensor face_vertices,
+    at::Tensor dist,
+    at::Tensor face_idx,
+    at::Tensor dist_type);
 
 void unbatched_triangle_distance_backward_cuda(
-    const at::Tensor grad_output,
-    const at::Tensor points,
-    const at::Tensor verts_1,
-    const at::Tensor verts_2,
-    const at::Tensor verts_3,
-    const at::Tensor idx,
-    const at::Tensor dist_type,
-    const at::Tensor grad_input_p,
-    const at::Tensor grad_input_v1,
-    const at::Tensor grad_input_v2,
-    const at::Tensor grad_input_v3);
+    at::Tensor grad_dist,
+    at::Tensor points,
+    at::Tensor face_vertices,
+    at::Tensor face_idx,
+    at::Tensor dist_type,
+    at::Tensor grad_points,
+    at::Tensor grad_face_vertices);
 
 }  // namespace kaolin
 
-#endif  // KAOLIN_METRICS_UNBATCHED_TRIANGLE_DISTANCE_H_
+#endif // KAOLIN_METRICS_UNBATCHED_TRIANGLE_DISTANCE_H_

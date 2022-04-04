@@ -1,4 +1,5 @@
-# Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2019,20-21 NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import warnings
 from pathlib import Path
 
@@ -85,10 +87,10 @@ synset_to_labels = {
 label_to_synset = {label: synset for synset, labels in synset_to_labels.items() for label in labels}
 
 def _convert_categories(categories):
-    if not (c in synset_to_label.keys() + label_to_synset.keys()
-            for c in categories):
-        warnings.warn('Some or all of the categories requested are not part of \
-            ShapeNetCore. Data loading may fail if these categories are not avaliable.')
+    for c in categories:
+        if c not in synset_to_labels.keys() and c not in label_to_synset.keys():
+            warnings.warn('Some or all of the categories requested are not part of \
+                ShapeNetCore. Data loading may fail if these categories are not avaliable.')
     synsets = [label_to_synset[c] if c in label_to_synset.keys()
                else c for c in categories]
     return synsets
@@ -179,7 +181,7 @@ class ShapeNetV1(KaolinDataset):
         self.paths = []
         self.synset_idxs = []
         if categories is None:
-            self.synsets = list(self.SUPPORTED_SYNSETS)
+            self.synsets = sorted(self.SUPPORTED_SYNSETS)
         else:
             self.synsets = _convert_categories(categories)
             for s in self.synsets:
@@ -206,7 +208,7 @@ class ShapeNetV1(KaolinDataset):
             self.paths += models
             self.synset_idxs += [i] * len(models)
 
-        self.names = [p.name for p in self.paths]
+        self.names = [os.path.join(p.parent.name, p.name) for p in self.paths]
 
     def __len__(self):
         return len(self.paths)
@@ -238,9 +240,10 @@ class ShapeNetV2(KaolinDataset):
 
     Args:
         root (str): path to ShapeNet root directory
-        categories (list): List of categories to load from ShapeNet. This list may
-                           contain synset ids, class label names (for ShapeNetCore classes),
-                           or a combination of both. Default: all supported categories.
+        categories (list):
+            List of categories to load from ShapeNet. This list may
+            contain synset ids, class label names (for ShapeNetCore classes),
+            or a combination of both. Default: all supported categories.
         train (bool):
             If True, return the training set, otherwise the test set.
             Default: True.
@@ -346,7 +349,7 @@ class ShapeNetV2(KaolinDataset):
             self.paths += models
             self.synset_idxs += [i] * len(models)
 
-        self.names = [p.name for p in self.paths]
+        self.names = [os.path.join(p.parent.name, p.name) for p in self.paths]
 
     def __len__(self):
         return len(self.paths)

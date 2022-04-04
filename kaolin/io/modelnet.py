@@ -1,4 +1,5 @@
-# Copyright (c) 2019-2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2019,20-21 NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from pathlib import Path
 
 from kaolin.io.dataset import KaolinDataset
 from kaolin.io.off import import_mesh
 
-import os
 
 class ModelNet(KaolinDataset):
     r"""Dataset class for the ModelNet dataset.
@@ -27,10 +28,9 @@ class ModelNet(KaolinDataset):
 
     Args:
         root (str): Path to the base directory of the ModelNet dataset.
-        split (str): Split to load ('train' vs 'test', default: 'train').
         categories (list): 
-            List of categories to load. If None is provided, 
-            all categories will be loaded. (default: None).
+            List of categories to load. Default: all categories available.
+        split (str): Split to load ('train' vs 'test', default: 'train').
     """
     def __init__(self, root, categories=None, split='train'):
         assert split in ['train', 'test'], f'Split must be either train or test ,but got {split}.'
@@ -58,7 +58,7 @@ class ModelNet(KaolinDataset):
             self.labels += [category] * len(model_paths)
 
 
-        self.names = [p.name for p in self.paths]
+        self.names = [os.path.join(p.parent.name, p.name) for p in self.paths]
 
     def __len__(self):
         return len(self.paths)

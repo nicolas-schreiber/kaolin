@@ -1,4 +1,5 @@
-# Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2019, 20-21 NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -56,14 +57,37 @@ def hetero_mesh_path():
                         os.pardir, 'samples/rocket_hetero.usd')
 
 @pytest.fixture(scope='module')
+def hetero_subsets_materials_mesh_path():
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    return os.path.join(cur_dir, os.pardir, os.pardir,
+                        os.pardir, 'samples/rocket_hetero_subsets_materials.usd')
+
+@pytest.fixture(scope='module')
 def pointcloud():
     cur_dir = os.path.dirname(os.path.realpath(__file__))
-    pointcloud = usd.import_pointcloud(
+    pointcloud, color, normals = usd.import_pointcloud(
         os.path.join(cur_dir, os.pardir, os.pardir,
-                     os.pardir, 'samples/rocket_pointcloud.usda'),
+                     os.pardir, 'samples/rocket_pointcloud_GeomPoints.usda'),
         '/World/pointcloud')
     return pointcloud
 
+@pytest.fixture(scope='module')
+def pointcloud_instancer():
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    pointcloud, color, normals = usd.import_pointcloud(
+        os.path.join(cur_dir, os.pardir, os.pardir,
+                     os.pardir, 'samples/rocket_pointcloud.v0.9.0.usda'),
+        '/World/pointcloud')
+    return pointcloud
+
+@pytest.fixture(scope='module')
+def pointcloud_with_color():
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    pointcloud, color, normals = usd.import_pointcloud(
+        os.path.join(cur_dir, os.pardir, os.pardir,
+                     os.pardir, 'samples/golden/pointcloud_GeomPoints_colors.usda'),
+        '/World/pointcloud')
+    return (pointcloud, color)
 
 class TestMeshes:
     def setup_method(self):
@@ -99,10 +123,15 @@ class TestMeshes:
         with pytest.raises(ValueError):
             usd.import_meshes(out_path, ['/foo'] + scene_paths)
 
-    def test_import_hetero_fail(self, scene_paths, out_dir, hetero_mesh_path):
+    def test_import_hetero_fail_import_meshes(self, scene_paths, out_dir, hetero_mesh_path):
         """Test that import fails when importing heterogeneous mesh without handler"""
         with pytest.raises(usd.NonHomogeneousMeshError):
             usd.import_meshes(hetero_mesh_path, ['/Root'])
+
+    def test_import_hetero_fail_import_mesh(self, scene_paths, out_dir, hetero_mesh_path):
+        """Test that import fails when importing heterogeneous mesh without handler"""
+        with pytest.raises(usd.NonHomogeneousMeshError):
+            usd.import_mesh(file_path=hetero_mesh_path, scene_path='/Root')
 
     def test_import_hetero_skip(self, scene_paths, out_dir, hetero_mesh_path, mesh):
         """Test that import skips mesh when importing heterogeneous mesh with skip handler"""
@@ -119,14 +148,19 @@ class TestMeshes:
         mixed_in = usd.import_meshes(out_path, heterogeneous_mesh_handler=usd.heterogeneous_mesh_handler_skip)
         assert len(mixed_in) == 2
 
-    def test_import_hetero_empty(self, scene_paths, out_dir, hetero_mesh_path):
+    def test_import_hetero_empty_import_meshes(self, scene_paths, out_dir, hetero_mesh_path):
         """Test that imports empty mesh when importing heterogeneous mesh with empty handler"""
         mesh = usd.import_meshes(hetero_mesh_path, ['/Root'],
                                  heterogeneous_mesh_handler=usd.heterogeneous_mesh_handler_empty)
         for attr in mesh:
             assert len(attr[0]) == 0
 
-    def test_import_hetero_homogenize(self, scene_paths, out_dir, hetero_mesh_path):
+    def test_import_hetero_empty_import_mesh(self, scene_paths, out_dir, hetero_mesh_path):
+        """Test that imports empty mesh when importing heterogeneous mesh with empty handler"""
+        mesh = usd.import_mesh(hetero_mesh_path, scene_path='/Root', heterogeneous_mesh_handler=usd.heterogeneous_mesh_handler_empty)
+        assert len(mesh[0]) == 0
+
+    def test_import_hetero_homogenize_import_meshes(self, scene_paths, out_dir, hetero_mesh_path):
         """Test that imports homogeneous mesh when importing heterogeneous mesh with naive homogenize handler"""
         # TODO(jlafleche) Render meshes before/after homogenize operation
         out_path = os.path.join(out_dir, 'homogenized.usda')
@@ -140,6 +174,53 @@ class TestMeshes:
         # Confirm exported USD matches golden file
         golden = os.path.join(out_dir, '../../../../samples/golden/rocket_homogenized.usda')
         assert open(golden).read() == open(out_path).read()
+
+    def test_import_hetero_homogenize_import_mesh(self, scene_paths, out_dir, hetero_mesh_path):
+        """Test that imports homogeneous mesh when importing heterogeneous mesh with naive homogenize handler"""
+        # TODO(jlafleche) Render meshes before/after homogenize operation
+        out_path = os.path.join(out_dir, 'homogenized.usda')
+        mesh = usd.import_mesh(hetero_mesh_path, scene_path='/Root',
+                               heterogeneous_mesh_handler=usd.heterogeneous_mesh_handler_naive_homogenize)
+        usd.export_mesh(out_path, '/World/Rocket', vertices=mesh.vertices, faces=mesh.faces)
+
+        # Confirm we now have a triangle mesh
+        assert mesh.faces.size(1) == 3
+
+        # Confirm exported USD matches golden file
+        golden = os.path.join(out_dir, '../../../../samples/golden/rocket_homogenized.usda')
+        assert open(golden).read() == open(out_path).read()
+
+    def test_import_material_subsets(self, scene_paths, out_dir, hetero_subsets_materials_mesh_path):
+        """Test that imports materials from mesh with subsets"""
+        out_path = os.path.join(out_dir, 'homogenized_materials.usda')
+        mesh = usd.import_mesh(hetero_subsets_materials_mesh_path, scene_path='/Root',
+                               heterogeneous_mesh_handler=usd.heterogeneous_mesh_handler_naive_homogenize,
+                               with_materials=True)
+        usd.export_mesh(out_path, '/World/Rocket', vertices=mesh.vertices, faces=mesh.faces,
+                        materials_order=mesh.materials_order, materials=mesh.materials, uvs=mesh.uvs)
+
+        # Confirm we now have a triangle mesh
+        assert mesh.faces.size(1) == 3
+
+        # Confirm exported USD matches golden file
+        golden = os.path.join(out_dir, '../../../../samples/golden/rocket_homogenized_materials.usda')
+        assert open(golden).read() == open(out_path).read()
+
+    def test_import_with_material(self, scene_paths, out_dir, hetero_subsets_materials_mesh_path):
+        """Test that imports materials from mesh with subsets"""
+        out_path = os.path.join(out_dir, 'homogenized_materials.usda')
+        mesh = usd.import_mesh(hetero_subsets_materials_mesh_path, scene_path='/Root',
+                               heterogeneous_mesh_handler=usd.heterogeneous_mesh_handler_naive_homogenize,
+                               with_materials=False)
+        assert mesh.materials is None
+        assert mesh.materials_order is None
+
+        mesh = usd.import_mesh(hetero_subsets_materials_mesh_path, scene_path='/Root',
+                               heterogeneous_mesh_handler=usd.heterogeneous_mesh_handler_naive_homogenize,
+                               with_materials=True)
+        assert mesh.materials is not None
+        assert mesh.materials_order is not None
+
 
     def test_import_multiple(self, scene_paths, out_dir, mesh, mesh_alt):
         out_path = os.path.join(out_dir, self.file_name)
@@ -182,27 +263,25 @@ class TestMeshes:
 
     def test_export_only_face_uvs(self, out_dir, mesh):
         out_path = os.path.join(out_dir, 'only_uvs.usda')
-        usd.export_mesh(out_path, uvs=mesh.uvs, face_uvs_idx=mesh.face_uvs_idx)
+        usd.export_mesh(out_path, vertices=mesh.vertices, faces=mesh.faces, uvs=mesh.uvs)
         mesh_in = usd.import_mesh(out_path)
         assert torch.allclose(mesh_in.uvs.view(-1, 2), mesh.uvs.view(-1, 2))
-        assert torch.equal(mesh_in.face_uvs_idx.view(-1), mesh.face_uvs_idx.view(-1))
 
     def test_import_st_indices_facevarying(self, out_dir, mesh):
         out_path = os.path.join(out_dir, 'st_indices.usda')
-        uvs = torch.rand((100, 2))
+        uvs = torch.rand((mesh.faces.view(-1).size(0), 2))
         scene_path = '/World/mesh_0'
         face_uvs_idx = (torch.rand(mesh.faces.shape[:2]) * 99).long()
         usd.export_mesh(out_path, scene_path=scene_path, vertices=mesh.vertices,
                         faces=mesh.faces, uvs=uvs, face_uvs_idx=face_uvs_idx)
 
-        # check that interpolation was set correctly to 'vertex'
+        # check that interpolation was set correctly to 'faceVarying'
         stage = Usd.Stage.Open(out_path)
         pv = UsdGeom.Mesh(stage.GetPrimAtPath(scene_path)).GetPrimvar('st')
         assert pv.GetInterpolation() == 'faceVarying'
 
         mesh_in = usd.import_mesh(out_path)
         assert torch.allclose(mesh_in.uvs, uvs)
-        assert torch.equal(mesh_in.face_uvs_idx, face_uvs_idx)
 
     def test_import_st_no_indices_vertex(self, out_dir, mesh):
         out_path = os.path.join(out_dir, 'st_no_indices_vertex.usda')
@@ -253,7 +332,7 @@ class TestMeshes:
     def test_export_only_face_normals(self, out_dir, mesh):
         out_path = os.path.join(out_dir, 'only_normals.usda')
         usd.export_mesh(out_path, face_normals=mesh.vertex_normals[mesh.face_normals])
-        mesh_in = usd.import_mesh(out_path)
+        mesh_in = usd.import_mesh(out_path, with_normals=True)
         assert torch.allclose(mesh_in.face_normals.view(-1, 3), mesh.vertex_normals[mesh.face_normals].view(-1, 3))
 
 
@@ -264,16 +343,34 @@ class TestPointCloud:
 
     def test_export_single(self, out_dir, pointcloud):
         out_path = os.path.join(out_dir, 'pointcloud.usda')
+        usd.export_pointcloud(pointcloud=pointcloud, file_path=out_path, scene_path=self.scene_path, points_type='usd_geom_points')
+
+        # Confirm exported USD matches golden file
+        golden = os.path.join(out_dir, '../../../../samples/golden/pointcloud_GeomPoints.usda')
+        assert open(golden).read() == open(out_path).read()
+
+    def test_export_single_instancer(self, out_dir, pointcloud):
+        out_path = os.path.join(out_dir, 'pointcloud_instancer.usda')
         usd.export_pointcloud(pointcloud=pointcloud, file_path=out_path, scene_path=self.scene_path)
 
         # Confirm exported USD matches golden file
-        golden = os.path.join(out_dir, '../../../../samples/golden/pointcloud.usda')
+        golden = os.path.join(out_dir, '../../../../samples/golden/pointcloud_PointInstancer.usda')
         assert open(golden).read() == open(out_path).read()
 
     def test_export_multiple(self, out_dir, pointcloud):
         out_path = os.path.join(out_dir, 'pointclouds.usda')
 
         # Export some meshes using default scene paths
+        usd.export_pointclouds(pointclouds=[pointcloud for _ in range(self.num_multiple)],
+                               file_path=out_path, points_type='usd_geom_points')
+
+        # Test that can get their scene paths later
+        scene_paths = usd.get_pointcloud_scene_paths(out_path)
+        assert len(scene_paths) == self.num_multiple
+
+    def test_export_multiple_instancer(self, out_dir, pointcloud):
+        out_path = os.path.join(out_dir, 'pointclouds_instancer.usda')
+
         usd.export_pointclouds(pointclouds=[pointcloud for _ in range(self.num_multiple)],
                                file_path=out_path)
 
@@ -283,7 +380,7 @@ class TestPointCloud:
 
     def test_import_single(self, out_dir, pointcloud):
         out_path = os.path.join(out_dir, 'pointcloud.usda')
-        pointcloud_in = usd.import_pointcloud(file_path=out_path, scene_path=self.scene_path)
+        pointcloud_in = usd.import_pointcloud(file_path=out_path, scene_path=self.scene_path).points
 
         # Confirm imported pointcloud matches original input
         assert torch.allclose(pointcloud, pointcloud_in)
@@ -294,9 +391,47 @@ class TestPointCloud:
 
         # Confirm imported pointcloud matches original input
         assert len(pointcloud_in_list) == self.num_multiple
-        for pointcloud_in in pointcloud_in_list:
+        for pointcloud_in, colors_in, normals_in in pointcloud_in_list:
             assert torch.allclose(pointcloud, pointcloud_in)
 
+    def test_import_single_instancer(self, out_dir, pointcloud_instancer):
+        # Test that the read from UsdPointInstancer is the same as the read from UsdGeomPoints
+        out_path = os.path.join(out_dir, 'pointcloud.usda')
+        pointcloud_in, colors_in, normals_in = usd.import_pointcloud(file_path=out_path, scene_path=self.scene_path)
+
+        # Confirm imported pointcloud matches original input
+        assert torch.allclose(pointcloud_instancer, pointcloud_in)
+
+    def test_import_multiple_instancer(self, out_dir, pointcloud_instancer):
+        # Test that the read from UsdPointInstancer is the same as the read from UsdGeomPoints
+        out_path = os.path.join(out_dir, 'pointclouds.usda')
+        pointcloud_in_list = usd.import_pointclouds(file_path=out_path)
+
+        # Confirm imported pointcloud matches original input
+        assert len(pointcloud_in_list) == self.num_multiple
+        for pointcloud_in, colors_in, normals_in in pointcloud_in_list:
+            assert torch.allclose(pointcloud_instancer, pointcloud_in)
+
+    def test_export_single_colors(self, out_dir, pointcloud_with_color):
+        # Export a single pointcloud with colors
+        pointcloud, color = pointcloud_with_color
+
+        out_path = os.path.join(out_dir, 'pointcloud_colors.usda')
+        usd.export_pointcloud(pointcloud=pointcloud, file_path=out_path, color=color, scene_path=self.scene_path, points_type='usd_geom_points')
+
+        # Confirm exported USD matches golden file
+        golden = os.path.join(out_dir, '../../../../samples/golden/pointcloud_GeomPoints_colors.usda')
+        assert open(golden).read() == open(out_path).read()
+
+    def test_import_single_color(self, out_dir, pointcloud):
+        out_path = os.path.join(out_dir, 'pointcloud_colors.usda')
+        pointcloud_in, color, _ = usd.import_pointcloud(file_path=out_path, scene_path=self.scene_path)
+
+        # Confirm imported pointcloud matches original input
+        assert torch.allclose(pointcloud, pointcloud_in)
+
+        # Confirm that points have the same shape as color
+        assert pointcloud_in.shape == color.shape
 
 class TestVoxelGrid:
     def setup_method(self):
@@ -369,7 +504,6 @@ class TestMisc:
         usd.export_mesh(out_path, scene_path='/World/meshes', vertices=mesh.vertices, faces=mesh.faces, time=20)
         usd.export_mesh(out_path, scene_path='/World/meshes', vertices=mesh.vertices, faces=None, time=250)
         times = usd.get_authored_time_samples(out_path)
-        assert times == [1, 20, 250]
+        assert times == [1.0, 20.0, 250.0]
 
         usd.export_pointcloud(out_path, pointcloud)
-

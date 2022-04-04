@@ -14,10 +14,12 @@
 
 import pytest
 import torch
+import os
 
 from kaolin.ops.gcn import sparse_bmm, normalize_adj, GraphConv
 from kaolin.utils.testing import ALL_DEVICES
 
+os.environ['NVIDIA_TF32_OVERRIDE'] = '0'
 
 @pytest.mark.parametrize('device', ALL_DEVICES)
 def test_sparse_bmm(device):
@@ -157,15 +159,15 @@ class TestGraphConv(object):
 
     def test_gcn_sparse(self, device, gcn, adj, node_feat_in, expected):
         node_feat_out = gcn(node_feat_in, adj, normalize_adj=True)
-        assert torch.allclose(node_feat_out, expected)
+        assert torch.allclose(node_feat_out, expected, rtol=1e-3, atol=1e-3)
         adj = normalize_adj(adj)
         node_feat_out_2 = gcn(node_feat_in, adj, normalize_adj=False)
-        assert torch.allclose(node_feat_out, node_feat_out_2)
+        assert torch.allclose(node_feat_out, node_feat_out_2, rtol=1e-4, atol=1e-4)
 
     def test_gcn_dense(self, device, gcn, adj, node_feat_in, expected):
         dense_adj = torch.sparse.mm(adj, torch.eye(3, device=device))
         node_feat_out = gcn(node_feat_in, dense_adj, normalize_adj=True)
-        assert torch.allclose(node_feat_out, expected)
+        assert torch.allclose(node_feat_out, expected, rtol=1e-3, atol=1e-3)
         dense_adj = normalize_adj(dense_adj)
         node_feat_out_2 = gcn(node_feat_in, dense_adj, normalize_adj=False)
-        assert torch.allclose(node_feat_out, node_feat_out_2)
+        assert torch.allclose(node_feat_out, node_feat_out_2, rtol=1e-4, atol=1e-4)

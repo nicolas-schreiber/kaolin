@@ -6,7 +6,7 @@ import posixpath
 import warnings
 
 try:
-    from pxr import Usd, UsdShade
+    from pxr import Usd
 except ImportError:
     warnings.warn("Warning: module pxr not found", ImportWarning)
 
@@ -43,26 +43,36 @@ class Timelapse:
                 return_params.append(v)
         return return_params
 
-    def add_pointcloud_batch(self, iteration=0, category='', pointcloud_list=None, colors=None, semantic_ids=None):
+    def add_pointcloud_batch(self, iteration=0, category='', pointcloud_list=None, colors=None, points_type="point_instancer"):
         """
         Add pointclouds to visualizer output.
 
         Args:
             iteration (int): Positive integer identifying the iteration the supplied pointclouds belong to.
-            pointcloud_list (list of tensors, optional): Batch of points of length N defining N pointclouds.
+            category (str, optional): Batch name.
+            pointcloud_list (list of tensors, optional): Batch of point clouds as (B x N x 3) tensor or list of variable
+               length point cloud tensors, each (N_i x 3).
             colors (list of tensors, optional): Batch of RGB colors of length N.
-            semantic_ids (list of int, optional): Batch of semantic IDs.
+            points_type (str): String that indicates whether to save pointcloud as UsdGeomPoints or PointInstancer. 
+                               "usd_geom_points" indicates UsdGeomPoints and "point_instancer" indicates PointInstancer. 
+                               Please refer here for UsdGeomPoints:
+                               https://graphics.pixar.com/usd/docs/api/class_usd_geom_points.html and here for PointInstancer
+                               https://graphics.pixar.com/usd/docs/api/class_usd_geom_point_instancer.html. 
+                               Default: "point_instancer".
         """
         validated = self._validate_parameters(
-            pointcloud_list=pointcloud_list, colors=colors, semantic_ids=semantic_ids,
+            pointcloud_list=pointcloud_list, colors=colors,
         )
-        pointcloud_list, colors, semantic_ids = validated
+        pointcloud_list, colors = validated
 
         pc_path = posixpath.join(self.logdir, category)
         os.makedirs(pc_path, exist_ok=True)
 
-        for i, sample in enumerate(zip(pointcloud_list, colors, semantic_ids)):
-            points, colour, semantic_id = sample
+        if colors is None:
+            colors = [None] * len(pointcloud_list)
+
+        for i, sample in enumerate(zip(pointcloud_list, colors)):
+            points, colour = sample
             # Establish default USD file paths for sample
             pc_name = f'pointcloud_{i}'
             ind_out_path = posixpath.join(pc_path, f'{pc_name}.usd') 
@@ -70,7 +80,12 @@ class Timelapse:
             if not os.path.exists(ind_out_path):
                 # If sample does not exist, create it.
                 stage = io.usd.create_stage(ind_out_path)
-                stage.DefinePrim(f'/{pc_name}', 'PointInstancer')
+                if points_type == "usd_geom_points":
+                    stage.DefinePrim(f'/{pc_name}', 'Points')
+                elif points_type == "point_instancer":
+                    stage.DefinePrim(f'/{pc_name}', 'PointInstancer')
+                else:
+                    raise ValueError(f"Expected points_type to be 'usd_geom_points' or 'point_instancer', but got '{points_type}'.")
                 stage.SetDefaultPrim(stage.GetPrimAtPath(f'/{pc_name}'))
             else:
                 stage = Usd.Stage.Open(ind_out_path)
@@ -78,14 +93,8 @@ class Timelapse:
 
             # Adjust end timecode to match current iteration
             stage.SetEndTimeCode(iteration)
+            io.usd.add_pointcloud(stage, points, f'/{pc_name}', colors=colour, time=iteration, points_type=points_type)
 
-            # Set each attribute supplied
-            if points is not None:
-                io.usd.add_pointcloud(stage, points, f'/{pc_name}', time=iteration)
-            if colour is not None:
-                raise NotImplementedError
-            if semantic_id is not None:
-                raise NotImplementedError
             stage.Save()
 
     def add_voxelgrid_batch(self, iteration=0, category='', voxelgrid_list=None, colors=None, semantic_ids=None):
@@ -196,13 +205,12 @@ class Timelapse:
                     vset.SetVariantSelection(material_name)
                     material.usd_root_path = meshes_path
                     with vset.GetVariantEditContext():
-                        material_prim = material.write_to_usd(
+                        material.write_to_usd(
                             ind_out_path, f'/{mesh_name}/{material_name}',
                             time=iteration,
                             texture_dir='textures',
-                            texture_file_prefix=f'{mesh_name}_{material_name}_{iteration}_')
-                        binding_api = UsdShade.MaterialBindingAPI(mesh_prim)
-                        binding_api.Bind(UsdShade.Material(material_prim))
+                            texture_file_prefix=f'{mesh_name}_{material_name}_{iteration}_',
+                            bound_prims=[mesh_prim])
             stage.Save()
 
 
@@ -307,6 +315,22 @@ class TimelapseParser(object):
             self.dir_info = TimelapseParser.parse_filepath_info(self.filepaths)
             return True
         return False
+
+    @staticmethod
+    def _count_items(cat_infos):
+        total = 0
+        for cat in cat_infos:
+            total += len(cat['ids'])
+        return total
+
+    def num_mesh_items(self):
+        return TimelapseParser._count_items(self.dir_info['mesh'])
+
+    def num_pointcloud_items(self):
+        return TimelapseParser._count_items(self.dir_info['pointcloud'])
+
+    def num_voxelgrid_items(self):
+        return TimelapseParser._count_items(self.dir_info['voxelgrid'])
 
     def num_mesh_categories(self):
         return len(self.dir_info['mesh'])

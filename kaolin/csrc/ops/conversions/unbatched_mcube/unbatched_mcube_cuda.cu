@@ -21,6 +21,7 @@
 #pragma message "THE VALUE OF CUB_NS_POSTFIX: " XSTR(CUB_NS_POSTFIX)
 #pragma message "THE VALUE OF CUB_NS_QUALIFIER: " XSTR(CUB_NS_QUALIFIER)
 
+#define CUB_NS_QUALIFIER ::kaolin::cub
 
 #include <stdio.h>
 #include <string.h>

@@ -1,5 +1,6 @@
-# Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.
-# 
+# Copyright (c) 2019,20-21 NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -59,7 +60,7 @@ class DIBRasterization(Function):
         points_min = torch.min(face_vertices_image, dim=2)[0]
         points_max = torch.max(face_vertices_image, dim=2)[0]
         face_bboxes = torch.cat((points_min, points_max), dim=2)
-        are_faces_valid = face_normals_z.squeeze(-1) >= 0
+        are_faces_valid = face_normals_z >= 0
         valid_faces = torch.where(are_faces_valid)
         valid_face_bboxes = face_bboxes[valid_faces[0], valid_faces[1]]
         valid_face_vertices_image = face_vertices_image[valid_faces[0], valid_faces[1]]
@@ -92,7 +93,7 @@ class DIBRasterization(Function):
                                             dtype=dtype,
                                             device=dev)
 
-        _C.render.packed_rasterize_forward_cuda(
+        _C.render.mesh.packed_rasterize_forward_cuda(
             valid_face_vertices_z.contiguous(),
             valid_face_vertices_image.contiguous(),
             valid_face_bboxes.contiguous(),
@@ -126,7 +127,7 @@ class DIBRasterization(Function):
                                       dtype=dtype,
                                       device=dev)
 
-        _C.render.generate_soft_mask_cuda(
+        _C.render.mesh.generate_soft_mask_cuda(
             face_vertices_image,
             face_large_bboxes,
             face_idx,
@@ -168,7 +169,7 @@ class DIBRasterization(Function):
 
         colors_bxfx3d = face_features
         gradcolors_bxfx3d = grad_face_features
-        _C.render.rasterize_backward_cuda(
+        _C.render.mesh.rasterize_backward_cuda(
             grad_interpolated_features.contiguous(),
             grad_improb_bxhxwx1.contiguous(),
             interpolated_features,

@@ -1,4 +1,5 @@
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020,21 NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -74,6 +75,7 @@ class Cache(object):
         return self._read(fpath)
 
     def _write(self, x, fpath):
+        fpath.parent.mkdir(parents=True, exist_ok=True)
         torch.save(x, fpath)
 
     def _read(self, fpath):
@@ -126,14 +128,11 @@ def _get_cache_key(dataset, index):
 
 KaolinDatasetItem = namedtuple('KaolinDatasetItem', ['data', 'attributes'])
 
-
 class KaolinDataset(Dataset):
     """A dataset supporting the separation of data and attributes, and combines
     them in its `__getitem__`.
-
     The return value of `__getitem__` will be a named tuple containing the
     return value of both `get_data` and `get_attributes`.
-
     The difference between `get_data` and `get_attributes` is that data are able
     to be transformed or preprocessed (such as using `ProcessedDataset`), while
     attributes are generally not.
@@ -141,7 +140,6 @@ class KaolinDataset(Dataset):
 
     def __getitem__(self, index):
         """Returns the item at the given index.
-
         Will contain a named tuple of both data and attributes.
         """
         attributes = self.get_attributes(index)
@@ -156,7 +154,6 @@ class KaolinDataset(Dataset):
     @abstractmethod
     def get_attributes(self, index):
         """Returns the attributes at the given index.
-
         Attributes are usually not transformed by wrappers such as
         `ProcessedDataset`.
         """
@@ -166,7 +163,6 @@ class KaolinDataset(Dataset):
     def __len__(self):
         """Returns the number of entries."""
         pass
-
 
 class ProcessedDataset(KaolinDataset):
     def __init__(self, dataset, preprocessing_transform=None,
@@ -235,7 +231,7 @@ class ProcessedDataset(KaolinDataset):
                     with torch.no_grad():
                         for idx in tqdm(range(len(self)), desc=desc,
                                         disable=no_progress):
-                            key = self.get_cache_key(key)
+                            key = self.get_cache_key(idx)
                             data = self._get_base_data(idx)
                             self.cache_convert(key, data)
                 else:
@@ -256,7 +252,6 @@ class ProcessedDataset(KaolinDataset):
 
     def get_data(self, index):
         """Returns the data at the given index. """
-        print(index)
         data = (self._get_base_data(index) if self.cache_convert is None else
                 self.cache_convert.try_get(self.get_cache_key(index)))
 
