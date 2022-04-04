@@ -11,8 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#define XSTR(x) STR(x)
+#define STR(x) #x
+
 #define CUB_NS_PREFIX namespace kaolin {
 #define CUB_NS_POSTFIX }
+// #define CUB_NS_QUALIFIER kaolin
+#pragma message "THE VALUE OF CUB_NS_PREFIX: " XSTR(CUB_NS_PREFIX)
+#pragma message "THE VALUE OF CUB_NS_POSTFIX: " XSTR(CUB_NS_POSTFIX)
+#pragma message "THE VALUE OF CUB_NS_QUALIFIER: " XSTR(CUB_NS_QUALIFIER)
+
 
 #include <stdio.h>
 #include <string.h>

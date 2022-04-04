@@ -132,7 +132,7 @@ def get_requirements():
         warnings.warn("usd-core is not compatible with python_version >= 3.8 "
                       "and won't be installed, please use python_version 3.6 or 3.6 "
                       "to use USD related features")
-    requirements.append('usd-core==20.11; python_version < "3.8"')
+    # requirements.append('usd-core; python_version < "3.8"')
     if INCLUDE_EXPERIMENTAL:
         requirements.append('tornado==6.0.4')
         requirements.append('flask==1.1.2')
@@ -150,13 +150,15 @@ def get_extensions():
     extra_compile_args = {'cxx': ['-O3']}
     define_macros = []
     sources = glob.glob('kaolin/csrc/**/*.cpp', recursive=True)
+    include_dirs = []
     # FORCE_CUDA is for cross-compilation in docker build
     if torch.cuda.is_available() or os.getenv('FORCE_CUDA', '0') == '1':
         with_cuda = True
-        define_macros += [("WITH_CUDA", None)]
+        define_macros += [("WITH_CUDA", None), ("THRUST_IGNORE_CUB_VERSION_CHECK", None)]
         sources += glob.glob('kaolin/csrc/**/*.cu', recursive=True)
         extension = CUDAExtension
         extra_compile_args.update({'nvcc': ['-O3']})
+        include_dirs = get_include_dirs()
     else:
         extension = CppExtension
         with_cuda = False
@@ -166,7 +168,8 @@ def get_extensions():
             name='kaolin._C',
             sources=sources,
             define_macros=define_macros,
-            extra_compile_args=extra_compile_args
+            extra_compile_args=extra_compile_args,
+            include_dirs=include_dirs
         )
     )
 
